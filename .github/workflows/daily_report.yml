@@ -1,0 +1,29 @@
+name: Enviar Reporte AgTech Diario
+
+on:
+  schedule:
+    # Se ejecuta a las 04:00 UTC (que son las 12:00 AM o 01:00 AM en Chile según el horario)
+    - cron: '0 4 * * *' 
+  workflow_dispatch: # Esto permite que tú lo ejecutes manualmente para probarlo
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar librerías
+        run: pip install requests twilio
+
+      - name: Ejecutar script de WhatsApp
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          MY_PHONE_NUMBER: ${{ secrets.MY_PHONE_NUMBER }}
+        run: python bot_whatsapp.py

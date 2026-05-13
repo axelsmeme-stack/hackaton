@@ -1,118 +1,57 @@
 import streamlit as st
 import requests
-import random
 import folium
 from streamlit_folium import st_folium
 
-# --- CLASE AGBRAIN (Lógica de Decisión e Inteligencia) ---
-class AgBrain:
-    def __init__(self, crop_type, moisture_threshold):
-        self.crop_type = crop_type
-        self.moisture_threshold = moisture_threshold 
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="AgTech Brain - Registro", layout="wide")
 
-    def get_weather(self):
-        # API Open-Meteo configurada para Chile (Santiago)
-        url = "https://api.open-meteo.com/v1/forecast?latitude=-33.45&longitude=-70.66&hourly=temperature_2m,precipitation_probability,et0_fao_evapotranspiration&timezone=America%2FSantiago&forecast_days=1"
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'temp': data['hourly']['temperature_2m'][0],
-                    'rain_prob': data['hourly']['precipitation_probability'][0],
-                    'et0': data['hourly']['et0_fao_evapotranspiration'][0]
+# Inicializar estado de sesión para el registro
+if 'registrado' not in st.session_state:
+    st.session_state.registrado = False
+
+# --- PÁGINA 1: REGISTRO E IDENTIDAD ---
+if not st.session_state.registrado:
+    st.title("🚜 Registro de Nuevo Terreno Agrícola")
+    st.markdown("Por favor, ingresa los datos para configurar el monitoreo satelital.")
+    
+    with st.form("registro_usuario"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nombre = st.text_input("Nombre Completo del Administrador")
+            hectareas = st.number_input("Cantidad de Hectáreas", min_value=0.1, step=0.1)
+        
+        with col2:
+            st.markdown("**Ubicación del Terreno (Coordenadas)**")
+            lat = st.number_input("Latitud", value=-33.45, format="%.6f")
+            lon = st.number_input("Longitud", value=-70.66, format="%.6f")
+        
+        btn_registro = st.form_submit_button("Configurar Monitoreo")
+        
+        if btn_registro:
+            if nombre:
+                st.session_state.registrado = True
+                st.session_state.user_data = {
+                    "nombre": nombre,
+                    "hectareas": hectareas,
+                    "coords": [lat, lon]
                 }
-            return None
-        except:
-            return None
+                st.rerun()
+            else:
+                st.error("Por favor, ingresa tu nombre para continuar.")
 
-    def detect_disease_sim(self):
-        """ Simulación de IA para detección de enfermedades """
-        health_score = random.uniform(0, 1)
-        if health_score > 0.85:
-            return "⚠️ ALERTA: Posible hongo detectado (Roya).", "error"
-        return "✅ SALUD: No se detectan anomalías.", "success"
+# --- PÁGINA 2: DASHBOARD PRINCIPAL (Solo si está registrado) ---
+else:
+    u = st.session_state.user_data
+    st.title(f"🌱 Dashboard: Campo de {u['nombre']}")
+    st.sidebar.success(f"Ubicación: {u['coords']}")
+    st.sidebar.info(f"Superficie: {u['hectareas']} Hectáreas")
 
-# --- CONFIGURACIÓN DE INTERFAZ STREAMLIT ---
-st.set_page_config(page_title="AgTech Brain - Chile", layout="wide")
+    # Botón para volver a registrar o cerrar sesión
+    if st.sidebar.button("Cambiar Terreno"):
+        st.session_state.registrado = False
+        st.rerun()
 
-st.title("🌱 AgTech Brain: Monitoreo Inteligente")
-st.markdown("---")
-
-# --- BARRA LATERAL (ENTRADAS DE SENSORES) ---
-st.sidebar.header("Configuración del Cultivo")
-crop = st.sidebar.selectbox("Tipo de Cultivo", ["Tomate", "Maíz", "Trigo", "Uva"])
-threshold = st.sidebar.slider("Umbral de Humedad Crítica (%)", 0, 100, 30)
-moisture_sensor = st.sidebar.number_input("Humedad Actual del Sensor (%)", 0, 100, 25)
-
-# Instanciamos el Cerebro y obtenemos datos
-cerebro = AgBrain(crop, threshold)
-weather = cerebro.get_weather()
-disease_msg, disease_type = cerebro.detect_disease_sim()
-
-# --- PANEL PRINCIPAL ---
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("📊 Estado en Tiempo Real")
-    
-    if weather:
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Temperatura", f"{weather['temp']} °C")
-        m2.metric("Prob. Lluvia", f"{weather['rain_prob']} %")
-        m3.metric("Evapotranspiración", f"{weather['et0']} mm")
-    
-    st.info(f"**Cultivo:** {crop} | **Humedad:** {moisture_sensor}%")
-    
-    if disease_type == "error":
-        st.error(disease_msg)
-    else:
-        st.success(disease_msg)
-
-    # Lógica de decisión basada en datos reales
-    if moisture_sensor < threshold:
-        if weather and weather['rain_prob'] > 60:
-            st.warning("🚜 DECISIÓN: ESPERAR (Lluvia inminente según Open-Meteo).")
-            decision_text = "Esperar por lluvia"
-        else:
-            st.error(f"💧 DECISIÓN: REGAR (Humedad baja + ET0 de {weather['et0']}mm).")
-            decision_text = "Iniciar riego"
-    else:
-        st.success("✅ DECISIÓN: ESTADO ÓPTIMO (No requiere riego).")
-        decision_text = "Todo en orden"
-
-with col2:
-    st.subheader("🗺️ Vista Satelital del Terreno")
-    # Mapa centrado en Chile con capa Satelital (Esri)
-    m = folium.Map(location=[-33.45, -70.66], zoom_start=15)
-    folium.TileLayer(
-        tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr = 'Esri',
-        name = 'Satellite',
-        overlay = False
-    ).add_to(m)
-    st_folium(m, width=700, height=300)
-
-st.markdown("---")
-
-# --- SECCIÓN WHATSAPP (MODIFICADA CON TU NÚMERO) ---
-st.subheader("📱 Reporte Diario WhatsApp")
-
-# Configura aquí tu número (Formato: 569XXXXXXXX)
-MI_NUMERO = "56934247954" 
-
-reporte = f"""*Reporte AgTech {crop}* 
----------------------------
-📍 Estado: {decision_text}
-🌡️ Temp: {weather['temp']}°C
-💧 Humedad: {moisture_sensor}%
-🔬 IA: {disease_msg}
----------------------------"""
-
-st.code(reporte, language="text")
-
-if st.button("Enviar Reporte a WhatsApp"):
-    # Genera el enlace directo a tu chat
-    texto_url = requests.utils.quote(reporte)
-    url_whatsapp = f"https://wa.me/{MI_NUMERO}?text={texto_url}"
-    st.markdown(f"### [✅ CONFIRMAR ENVÍO A WHATSAPP]({url_whatsapp})")
+    # --- AQUÍ CONTINÚA TU LÓGICA DE AGBRAIN ---
+    # Nota: Usa u['coords'][0] para la latitud y u['coords'][1] para la longitud
+    # en tus llamadas a Open-Meteo y Folium para que el mapa se centre solo.

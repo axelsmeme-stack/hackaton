@@ -24,7 +24,7 @@ cuerpo = f"""
 
 # 4. Envío (Usando el número de image_1c545f.png)
 message = client.messages.create(
-    from_='whatsapp:+19789694942', # Número de tu imagen image_1c545f.png
+    from_='whatsapp:+14155238886', # Número de tu imagen image_1c545f.png
     body=cuerpo,
     to=f'whatsapp:{os.environ["MY_PHONE_NUMBER"]}'
 )

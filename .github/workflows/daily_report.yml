@@ -2,9 +2,8 @@ name: Enviar Reporte AgTech Diario
 
 on:
   schedule:
-    # Se ejecuta a las 04:00 UTC (que son las 12:00 AM o 01:00 AM en Chile según el horario)
     - cron: '0 4 * * *' 
-  workflow_dispatch: # Esto permite que tú lo ejecutes manualmente para probarlo
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -18,6 +17,7 @@ jobs:
         with:
           python-version: '3.11'
 
+      # ESTA ES LA PARTE QUE SOLUCIONA EL ERROR DE TU IMAGEN
       - name: Instalar librerías
         run: pip install requests twilio
 

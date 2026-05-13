@@ -2,56 +2,69 @@ import streamlit as st
 import requests
 import folium
 from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
+
+# Configuración del geocodificador
+geolocator = Nominatim(user_agent="agtech_brain_chile")
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="AgTech Brain - Registro", layout="wide")
+st.set_page_config(page_title="AgTech Brain", layout="wide")
 
-# Inicializar estado de sesión para el registro
 if 'registrado' not in st.session_state:
     st.session_state.registrado = False
 
-# --- PÁGINA 1: REGISTRO E IDENTIDAD ---
+# --- PÁGINA 1: REGISTRO POR DIRECCIÓN ---
 if not st.session_state.registrado:
     st.title("🚜 Registro de Nuevo Terreno Agrícola")
-    st.markdown("Por favor, ingresa los datos para configurar el monitoreo satelital.")
     
-    with st.form("registro_usuario"):
-        col1, col2 = st.columns(2)
-        with col1:
-            nombre = st.text_input("Nombre Completo del Administrador")
-            hectareas = st.number_input("Cantidad de Hectáreas", min_value=0.1, step=0.1)
+    with st.form("registro_direccion"):
+        nombre = st.text_input("Nombre Completo del Administrador")
+        hectareas = st.number_input("Cantidad de Hectáreas", min_value=0.1)
         
-        with col2:
-            st.markdown("**Ubicación del Terreno (Coordenadas)**")
-            lat = st.number_input("Latitud", value=-33.45, format="%.6f")
-            lon = st.number_input("Longitud", value=-70.66, format="%.6f")
+        st.markdown("### Ubicación del Domicilio")
+        calle_num = st.text_input("Calle y Número (ej: Av. Vicuña Mackenna 4860)")
+        comuna = st.text_input("Población / Comuna", value="Santiago")
+        ciudad = "Chile"
         
         btn_registro = st.form_submit_button("Configurar Monitoreo")
         
         if btn_registro:
-            if nombre:
-                st.session_state.registrado = True
-                st.session_state.user_data = {
-                    "nombre": nombre,
-                    "hectareas": hectareas,
-                    "coords": [lat, lon]
-                }
-                st.rerun()
-            else:
-                st.error("Por favor, ingresa tu nombre para continuar.")
+            direccion_completa = f"{calle_num}, {comuna}, {ciudad}"
+            try:
+                # Convertimos dirección a coordenadas
+                location = geolocator.geocode(direccion_completa)
+                if location:
+                    st.session_state.registrado = True
+                    st.session_state.user_data = {
+                        "nombre": nombre,
+                        "hectareas": hectareas,
+                        "direccion": direccion_completa,
+                        "lat": location.latitude,
+                        "lon": location.longitude
+                    }
+                    st.success(f"Ubicación encontrada: {location.address}")
+                    st.rerun()
+                else:
+                    st.error("No pudimos encontrar esa dirección. Intenta ser más específico.")
+            except Exception as e:
+                st.error("Error al conectar con el servicio de mapas.")
 
-# --- PÁGINA 2: DASHBOARD PRINCIPAL (Solo si está registrado) ---
+# --- PÁGINA 2: DASHBOARD DINÁMICO ---
 else:
     u = st.session_state.user_data
-    st.title(f"🌱 Dashboard: Campo de {u['nombre']}")
-    st.sidebar.success(f"Ubicación: {u['coords']}")
-    st.sidebar.info(f"Superficie: {u['hectareas']} Hectáreas")
-
-    # Botón para volver a registrar o cerrar sesión
-    if st.sidebar.button("Cambiar Terreno"):
-        st.session_state.registrado = False
-        st.rerun()
-
-    # --- AQUÍ CONTINÚA TU LÓGICA DE AGBRAIN ---
-    # Nota: Usa u['coords'][0] para la latitud y u['coords'][1] para la longitud
-    # en tus llamadas a Open-Meteo y Folium para que el mapa se centre solo.
+    st.title(f"🌱 Dashboard: Terreno de {u['nombre']}")
+    
+    # Aquí insertas tu lógica anterior de clima usando u['lat'] y u['lon']
+    # El mapa satelital se centrará automáticamente:
+    m = folium.Map(location=[u['lat'], u['lon']], zoom_start=17)
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri', name='Satellite'
+    ).add_to(m)
+    folium.Marker([u['lat'], u['lon']], popup=u['direccion']).add_to(m)
+    
+    st_folium(m, width=1000, height=400)
+    
+    # Mostrar valores importantes
+    st.write(f"**Dirección registrada:** {u['direccion']}")
+    st.write(f"**Superficie:** {u['hectareas']} Hectáreas")

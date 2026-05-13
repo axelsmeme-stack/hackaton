@@ -99,7 +99,7 @@ st.markdown("---")
 st.subheader("📱 Reporte Diario WhatsApp")
 
 # Configura aquí tu número (Formato: 569XXXXXXXX)
-MI_NUMERO = "56931042498" 
+MI_NUMERO = "56934247954" 
 
 reporte = f"""*Reporte AgTech {crop}* 
 ---------------------------

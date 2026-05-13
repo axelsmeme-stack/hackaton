@@ -5,13 +5,13 @@ import folium
 import os
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
-from twilio.rest import Client # Esta es la línea 8 que daba el error
+from twilio.rest import Client
 
 # --- CONFIGURACIÓN INICIAL ---
-geolocator = Nominatim(user_agent="agtech_brain_axel_final")
-st.set_page_config(page_title="AgTech Brain - Monitoreo Profesional", layout="wide")
+geolocator = Nominatim(user_agent="agtech_brain_final_v2")
+st.set_page_config(page_title="AgTech Brain - Sistema de Gestión", layout="wide")
 
-# --- LÓGICA DE INTELIGENCIA (AgBrain) ---
+# --- LÓGICA DE INTELIGENCIA Y FUNCIONES ---
 class AgBrain:
     def __init__(self, lat, lon):
         self.lat = lat
@@ -26,130 +26,110 @@ class AgBrain:
                 'rain_prob': res['hourly']['precipitation_probability'][0],
                 'et0': res['hourly']['et0_fao_evapotranspiration'][0]
             }
-        except:
-            return None
+        except: return None
 
-    def detect_disease_sim(self):
-        score = random.uniform(0, 1)
-        if score > 0.85:
-            return "⚠️ ALERTA: Posible hongo detectado (Roya).", "error"
-        return "✅ SALUD: No se detectan anomalías en el follaje.", "success"
-
-# --- FUNCIÓN PARA ENVIAR WHATSAPP (Twilio) ---
-def enviar_whatsapp_reporte(datos_usuario, clima, humedad, msg_ia):
+def enviar_whatsapp_reporte(u, clima, humedad, msg_ia):
     try:
         account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
         auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
         client = Client(account_sid, auth_token)
-
-        cuerpo = f"""
-🌱 *REPORTE AGTECH BAJO DEMANDA* 🚜
----------------------------
-👤 Administrador: {datos_usuario['nombre']}
-📍 Ubicación: {datos_usuario['addr']}
-📐 Superficie: {datos_usuario['hectareas']} Ha.
----------------------------
-🌡️ Temp: {clima['temp']}°C
-💧 Humedad Suelo: {humedad}%
-🌦️ Prob. Lluvia: {clima['rain_prob']}%
-🌾 IA: {msg_ia}
----------------------------
-✅ Acción: Reporte generado desde Dashboard."""
-
-        message = client.messages.create(
-            from_='whatsapp:+14155238886', 
+        cuerpo = f"🌱 *REPORTE AGTECH*\nUbicación: {u['addr']}\nTemp: {clima['temp']}°C\nHumedad: {humedad}%\nIA: {msg_ia}"
+        client.messages.create(
+            from_='whatsapp:+14155238886',
             body=cuerpo,
             to=f'whatsapp:{st.secrets["MY_PHONE_NUMBER"]}'
         )
-        return True, message.sid
-    except Exception as e:
-        return False, str(e)
+        return True
+    except: return False
 
 # --- CONTROL DE SESIÓN ---
 if 'registrado' not in st.session_state:
     st.session_state.registrado = False
 
-# --- PÁGINA 1: REGISTRO ---
+# --- PÁGINA DE REGISTRO ---
 if not st.session_state.registrado:
-    st.title("🚜 Registro de Nuevo Terreno Agrícola")
-    with st.form("registro_agtech"):
-        nombre = st.text_input("Nombre Completo del Administrador")
-        calle_direccion = st.text_input("Dirección (Calle, Número, Comuna)")
-        hectareas = st.number_input("Cantidad de Hectáreas", min_value=0.1, step=0.5)
-        
-        if st.form_submit_button("Configurar Dashboard"):
-            if nombre and calle_direccion:
-                try:
-                    location = geolocator.geocode(f"{calle_direccion}, Chile")
-                    if location:
-                        st.session_state.user_data = {
-                            "nombre": nombre, "hectareas": hectareas,
-                            "lat": location.latitude, "lon": location.longitude,
-                            "addr": location.address
-                        }
-                        st.session_state.registrado = True
-                        st.rerun()
-                    else:
-                        st.error("Dirección no encontrada. Intente ser más específico.")
-                except:
-                    st.error("Error de conexión. Intente nuevamente.")
-            else:
-                st.warning("Complete todos los campos.")
+    st.title("🚜 Bienvenido a AgTech Brain")
+    with st.form("registro"):
+        nombre = st.text_input("Nombre del Administrador")
+        calle = st.text_input("Dirección del Predio (Calle, Número, Comuna)")
+        hectareas = st.number_input("Hectáreas", min_value=0.1)
+        if st.form_submit_button("Configurar Sistema"):
+            location = geolocator.geocode(f"{calle}, Chile")
+            if location:
+                st.session_state.user_data = {
+                    "nombre": nombre, "hectareas": hectareas,
+                    "lat": location.latitude, "lon": location.longitude, "addr": location.address
+                }
+                st.session_state.registrado = True
+                st.rerun()
+            else: st.error("No se encontró la dirección.")
 
-# --- PÁGINA 2: DASHBOARD ---
+# --- APP PRINCIPAL (CON MENÚ) ---
 else:
     u = st.session_state.user_data
-    cerebro = AgBrain(u.get('lat', -33.45), u.get('lon', -70.66))
-    clima = cerebro.get_weather()
-    msg_ia, tipo_ia = cerebro.detect_disease_sim()
-    humedad_sim = random.randint(15, 50)
-
-    st.title(f"🌱 Dashboard: Terreno de {u.get('nombre', 'Usuario')}")
     
-    m = folium.Map(location=[u.get('lat', -33.45), u.get('lon', -70.66)], zoom_start=17)
-    folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri', name='Satellite'
-    ).add_to(m)
-    folium.Marker([u.get('lat', -33.45), u.get('lon', -70.66)], popup=u.get('addr')).add_to(m)
-    st_folium(m, width=1200, height=450)
+    # --- MENÚ LATERAL (SIDEBAR) ---
+    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2942/2942940.png", width=100)
+    st.sidebar.title("AgTech Menu")
+    opcion = st.sidebar.radio("Seleccione una categoría:", 
+                              ["📊 Dashboard General", "🛸 Despliegue del Dron", "⚙️ Configuración"])
 
-    st.write(f"📍 **Dirección registrada:** {u.get('addr', 'No disponible')}")
-    st.write(f"📐 **Superficie:** {u.get('hectareas', 0.0)} Hectáreas")
-    st.markdown("---")
+    # --- CATEGORÍA 1: DASHBOARD ---
+    if opcion == "📊 Dashboard General":
+        st.title(f"🌱 Dashboard: {u['nombre']}")
+        
+        # Mapa Satelital
+        m = folium.Map(location=[u['lat'], u['lon']], zoom_start=17)
+        folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                         attr='Esri', name='Satellite').add_to(m)
+        st_folium(m, width=1100, height=400)
 
-    st.subheader("📊 Valores Importantes de Monitoreo")
-    c1, c2, c3, c4 = st.columns(4)
-    if clima:
-        c1.metric("Temperatura", f"{clima['temp']} °C")
-        c2.metric("Prob. Lluvia", f"{clima['rain_prob']} %")
-        c3.metric("Humedad Suelo", f"{humedad_sim} %", delta="-3%" if humedad_sim < 30 else "Estable")
-        c4.metric("Evapotranspiración", f"{clima['et0']} mm")
+        # Clima y Métricas
+        cerebro = AgBrain(u['lat'], u['lon'])
+        clima = cerebro.get_weather()
+        humedad = random.randint(20, 45)
+        
+        col1, col2, col3 = st.columns(3)
+        if clima:
+            col1.metric("Temperatura", f"{clima['temp']} °C")
+            col2.metric("Humedad Suelo", f"{humedad} %")
+            col3.metric("ET0 (Evaporación)", f"{clima['et0']} mm")
 
-    st.markdown("---")
-    col_ia, col_riego = st.columns(2)
-    with col_ia:
-        st.subheader("🔬 Análisis de IA")
-        if tipo_ia == "error": st.error(msg_ia)
-        else: st.success(msg_ia)
+        st.markdown("---")
+        if st.button("📲 Enviar Reporte a WhatsApp"):
+            if enviar_whatsapp_reporte(u, clima, humedad, "Salud Óptima"):
+                st.success("Reporte enviado.")
+            else: st.error("Error al enviar. Revisa los Secrets.")
 
-    with col_riego:
-        st.subheader("🚜 Recomendación de Riego")
-        if humedad_sim < 30 and (clima['rain_prob'] if clima else 0) < 40:
-            st.warning("RECOMENDACIÓN: Activar sistema de riego.")
-        else:
-            st.success("ESTADO: Nivel de agua óptimo.")
+    # --- CATEGORÍA 2: DESPLIEGUE DEL DRON ---
+    elif opcion == "🛸 Despliegue del Dron":
+        st.title("🛸 Centro de Control de Drones")
+        st.subheader("Simulación de Despliegue en Tiempo Real")
+        
+        col_dron1, col_dron2 = st.columns(2)
+        
+        with col_dron1:
+            st.info("Parámetros de Vuelo")
+            bateria = st.progress(85, text="Batería del Dron: 85%")
+            st.write(f"📍 Punto de Inicio: {u['addr']}")
+            st.write("📡 Estado de Señal: Fuerte (GPS Fix)")
+            
+            if st.button("🚀 Iniciar Despegue"):
+                with st.spinner("Sincronizando motores y GPS..."):
+                    import time
+                    time.sleep(2)
+                    st.success("¡Dron en el aire! Iniciando patrullaje de hectáreas.")
+        
+        with col_dron2:
+            st.warning("Cámara Térmica / NDVI")
+            # Simulación de una imagen NDVI (salud de plantas)
+            st.image("https://www.scielo.org.mx/img/revistas/remexca/v10n5//2007-0934-remexca-10-05-1153-gf2.jpg", 
+                     caption="Mapa de salud (NDVI) generado por el dron")
 
-    st.markdown("---")
-    st.subheader("📲 Notificaciones en Tiempo Real")
-    if st.button("📤 Enviar Reporte Actual a WhatsApp"):
-        with st.spinner("Enviando reporte..."):
-            exito, resultado = enviar_whatsapp_reporte(u, clima, humedad_sim, msg_ia)
-            if exito:
-                st.success(f"✅ Reporte enviado exitosamente.")
-            else:
-                st.error(f"❌ Error: {resultado}")
-
-    if st.sidebar.button("Cerrar Sesión / Nuevo Registro"):
-        st.session_state.registrado = False
-        st.rerun()
+    # --- CATEGORÍA 3: CONFIGURACIÓN ---
+    elif opcion == "⚙️ Configuración":
+        st.title("⚙️ Configuración del Sistema")
+        st.write(f"Administrador: {u['nombre']}")
+        if st.button("🔴 Cerrar Sesión / Cambiar Terreno"):
+            st.session_state.registrado = False
+            st.rerun()

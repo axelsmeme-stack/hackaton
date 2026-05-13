@@ -5,7 +5,7 @@ import folium
 import os
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
-from twilio.rest import Client
+from twilio.rest import Client # Esta es la línea 8 que daba el error
 
 # --- CONFIGURACIÓN INICIAL ---
 geolocator = Nominatim(user_agent="agtech_brain_axel_final")
@@ -38,7 +38,6 @@ class AgBrain:
 # --- FUNCIÓN PARA ENVIAR WHATSAPP (Twilio) ---
 def enviar_whatsapp_reporte(datos_usuario, clima, humedad, msg_ia):
     try:
-        # Estos datos deben estar en los Secrets de Streamlit Cloud
         account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
         auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
         client = Client(account_sid, auth_token)
@@ -58,7 +57,7 @@ def enviar_whatsapp_reporte(datos_usuario, clima, humedad, msg_ia):
 ✅ Acción: Reporte generado desde Dashboard."""
 
         message = client.messages.create(
-            from_='whatsapp:+14155238886', # Número Sandbox de Twilio
+            from_='whatsapp:+14155238886', 
             body=cuerpo,
             to=f'whatsapp:{st.secrets["MY_PHONE_NUMBER"]}'
         )
@@ -97,7 +96,7 @@ if not st.session_state.registrado:
             else:
                 st.warning("Complete todos los campos.")
 
-# --- PÁGINA 2: DASHBOARD (Como se ve en image_da7a7a.jpg) ---
+# --- PÁGINA 2: DASHBOARD ---
 else:
     u = st.session_state.user_data
     cerebro = AgBrain(u.get('lat', -33.45), u.get('lon', -70.66))
@@ -107,7 +106,6 @@ else:
 
     st.title(f"🌱 Dashboard: Terreno de {u.get('nombre', 'Usuario')}")
     
-    # Mapa Satelital
     m = folium.Map(location=[u.get('lat', -33.45), u.get('lon', -70.66)], zoom_start=17)
     folium.TileLayer(
         tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -120,7 +118,6 @@ else:
     st.write(f"📐 **Superficie:** {u.get('hectareas', 0.0)} Hectáreas")
     st.markdown("---")
 
-    # Valores de Monitoreo ( image_da7a7a.jpg )
     st.subheader("📊 Valores Importantes de Monitoreo")
     c1, c2, c3, c4 = st.columns(4)
     if clima:
@@ -143,16 +140,15 @@ else:
         else:
             st.success("ESTADO: Nivel de agua óptimo.")
 
-    # --- NUEVA SECCIÓN: BOTÓN DE WHATSAPP ---
     st.markdown("---")
     st.subheader("📲 Notificaciones en Tiempo Real")
     if st.button("📤 Enviar Reporte Actual a WhatsApp"):
-        with st.spinner("Enviando reporte a Twilio..."):
+        with st.spinner("Enviando reporte..."):
             exito, resultado = enviar_whatsapp_reporte(u, clima, humedad_sim, msg_ia)
             if exito:
-                st.success(f"✅ Reporte enviado exitosamente a WhatsApp. (ID: {resultado})")
+                st.success(f"✅ Reporte enviado exitosamente.")
             else:
-                st.error(f"❌ Error al enviar: {resultado}. Verifique sus Secrets en Streamlit.")
+                st.error(f"❌ Error: {resultado}")
 
     if st.sidebar.button("Cerrar Sesión / Nuevo Registro"):
         st.session_state.registrado = False

@@ -10,7 +10,7 @@ from geopy.geocoders import Nominatim
 from twilio.rest import Client
 
 # --- CONFIGURACIÓN INICIAL ---
-geolocator = Nominatim(user_agent="agtech_brain_final_v5")
+geolocator = Nominatim(user_agent="agtech_brain_axel_v6")
 st.set_page_config(page_title="AgTech Brain | Gestión Agrícola", page_icon="🌿", layout="wide")
 
 st.markdown("""
@@ -59,7 +59,7 @@ if not st.session_state.registrado:
         col_reg1, col_reg2 = st.columns(2)
         with col_reg1:
             nombre = st.text_input("Nombre del Administrador")
-            calle = st.text_input("Dirección del Predio (Calle, Número, Comuna)")
+            calle = st.text_input("Dirección del Predio (Calle, Número, Ciudad)")
         with col_reg2:
             tipo_cultivo = st.selectbox("Tipo de Cultivo", ["Uva de Mesa", "Maíz", "Nogales", "Cerezas", "Trigo", "Otro"])
             hectareas = st.number_input("Hectáreas", min_value=0.1, value=1.0)
@@ -102,46 +102,43 @@ else:
             c3.metric("Humedad Suelo", f"{humedad_suelo} %")
             c4.metric("ET0", f"{clima['et0']} mm")
 
-        st.markdown("---")
-        if st.button("📤 Enviar Reporte de Cultivo a WhatsApp"):
-            try:
-                client = Client(st.secrets["TWILIO_ACCOUNT_SID"], st.secrets["TWILIO_AUTH_TOKEN"])
-                cuerpo = f"🌱 *REPORTE AGTECH*\nCultivo: {u['cultivo']}\nUbicación: {u['addr']}\nTemp: {clima['temp']}°C\nHumedad: {humedad_suelo}%"
-                client.messages.create(from_='whatsapp:+14155238886', body=cuerpo, to=f'whatsapp:{st.secrets["MY_PHONE_NUMBER"]}')
-                st.success("Reporte enviado con éxito.")
-            except: st.error("Error al enviar. Revisa los Secrets.")
-
     # --- CATEGORÍA 2: DESPLIEGUE DRON ---
     elif opcion == "🛸 Despliegue Dron":
         st.title("🚁 Torre de Control: Operación de Drones")
         st.sidebar.markdown("---")
-        st.sidebar.info(f"Objetivo: {u['cultivo']}")
+        st.sidebar.info(f"Cultivo actual: {u['cultivo']}")
         
-        area_m2 = st.sidebar.number_input("Área (m²)", value=int(u['hectareas']*10000))
-        patron_vuelo = st.sidebar.selectbox("Patrón de Distribución", ["Zig-Zag (Cobertura Total)", "Espiral (Foco Central)", "Perimetral (Bordes)"])
-        hora_simulada = st.sidebar.slider("Hora simulada:", 0, 23, 14)
+        area_m2 = st.sidebar.number_input("Área a trabajar (m²)", value=int(u['hectareas']*10000))
+        patron_vuelo = st.sidebar.selectbox("Patrón de Movimiento", ["Zig-Zag (Cobertura Total)", "Espiral (Foco Central)", "Perimetral (Bordes)"])
+        hora_simulada = st.sidebar.slider("Hora de operación:", 0, 23, 14)
 
         col_control, col_mapa = st.columns([1.2, 2])
         
         with col_control:
-            st.subheader("Operaciones Manuales")
+            st.subheader("Controles de Misión")
             tipo_mision = st.radio("Tipo de Aplicación:", ["Riego (Agua)", "Nutrición", "Tratamiento"])
             ruta_previa = calcular_ruta_dron(u['lat'], u['lon'], area_m2, patron_vuelo)
+            
             iniciar_vuelo = st.button("🚀 Forzar Despliegue Manual", type="primary", use_container_width=True)
             
             if iniciar_vuelo:
                 if tipo_mision == "Riego (Agua)" and 10 <= hora_simulada <= 18:
-                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ RIESGO:</b> Daño foliar por calor a las {hora_simulada}:00.</div>', unsafe_allow_html=True)
-                    if not st.checkbox("Confirmar riesgo"): st.stop()
-                st.success(f"✅ Misión de {tipo_mision} en {u['cultivo']} iniciada.")
+                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO DE SEGURIDAD:</b> Evaporación alta a las {hora_simulada}:00.</div>', unsafe_allow_html=True)
+                    if not st.checkbox("Confirmar bajo responsabilidad"): st.stop()
+                st.success(f"✅ Dron en ruta sobre cultivo de {u['cultivo']}.")
 
         with col_mapa:
             mapa = folium.Map(location=[u['lat'], u['lon']], zoom_start=18, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri")
             folium.Marker([u['lat'], u['lon']], icon=folium.Icon(color="black", icon="home")).add_to(mapa)
+            
             if iniciar_vuelo:
+                # Línea azul animada (AntPath) representando el movimiento real
                 plugins.AntPath(locations=ruta_previa, delay=800, color="cyan" if "Riego" in tipo_mision else "orange", weight=4).add_to(mapa)
             else:
+                # Línea amarilla de pre-visualización para mostrar por dónde se va a mover
                 folium.PolyLine(locations=ruta_previa, color="yellow", weight=2, dash_array='5, 10').add_to(mapa)
+                st.info("💡 La línea amarilla muestra la trayectoria planificada.")
+            
             st_folium(mapa, width=800, height=500, key="drone_control")
 
     if st.sidebar.button("Cerrar Sesión"):

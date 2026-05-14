@@ -10,7 +10,7 @@ from geopy.geocoders import Nominatim
 from twilio.rest import Client
 
 # --- CONFIGURACIÓN INICIAL ---
-geolocator = Nominatim(user_agent="agtech_brain_axel_v6")
+geolocator = Nominatim(user_agent="agtech_brain_axel_v7")
 st.set_page_config(page_title="AgTech Brain | Gestión Agrícola", page_icon="🌿", layout="wide")
 
 st.markdown("""
@@ -48,11 +48,38 @@ class AgBrain:
             return {'temp': res['hourly']['temperature_2m'][0], 'rain_prob': res['hourly']['precipitation_probability'][0], 'et0': res['hourly']['et0_fao_evapotranspiration'][0]}
         except: return None
 
+# --- FUNCIÓN DE ENVÍO WHATSAPP ---
+def enviar_whatsapp_profesional(u, clima, humedad):
+    try:
+        # Usa los secrets configurados en Streamlit Cloud
+        client = Client(st.secrets["TWILIO_ACCOUNT_SID"], st.secrets["TWILIO_AUTH_TOKEN"])
+        
+        cuerpo_mensaje = f"""
+🌱 *AGTECH BRAIN - INFORME*
+--------------------------
+👤 *Admin:* {u['nombre']}
+🚜 *Cultivo:* {u['cultivo']}
+📍 *Ubicación:* {u['addr']}
+🌡️ *Temp:* {clima['temp']}°C
+💧 *Humedad:* {humedad}%
+🌦️ *Prob. Lluvia:* {clima['rain_prob']}%
+--------------------------
+✅ Estado del predio verificado.
+"""
+        message = client.messages.create(
+            from_='whatsapp:+14155238886', # Sandbox Twilio
+            body=cuerpo_mensaje,
+            to=f'whatsapp:{st.secrets["MY_PHONE_NUMBER"]}'
+        )
+        return True, message.sid
+    except Exception as e:
+        return False, str(e)
+
 # --- CONTROL DE SESIÓN ---
 if 'registrado' not in st.session_state:
     st.session_state.registrado = False
 
-# --- PÁGINA 1: REGISTRO (CON SELECCIÓN DE CULTIVO) ---
+# --- PÁGINA 1: REGISTRO ---
 if not st.session_state.registrado:
     st.title("🚜 Bienvenido a AgTech Brain")
     with st.form("registro_maestro"):
@@ -81,14 +108,14 @@ else:
     st.sidebar.title("AgTech Menu")
     opcion = st.sidebar.radio("Navegación:", ["📊 Dashboard General", "🛸 Despliegue Dron"])
     
-    # --- CATEGORÍA 1: DASHBOARD ---
+    # --- CATEGORÍA 1: DASHBOARD GENERAL (RESTAURADO CON WHATSAPP) ---
     if opcion == "📊 Dashboard General":
         st.title(f"🌱 Dashboard: {u['nombre']}")
-        st.subheader(f"Monitoreo de Cultivo: {u['cultivo']}")
+        st.write(f"📋 **Monitoreo Activo:** {u['cultivo']} en {u['addr']}")
         
         m_main = folium.Map(location=[u['lat'], u['lon']], zoom_start=17)
         folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='Satellite').add_to(m_main)
-        folium.Marker([u['lat'], u['lon']], popup=f"Terreno de {u['cultivo']}").add_to(m_main)
+        folium.Marker([u['lat'], u['lon']], popup=f"Predio: {u['cultivo']}").add_to(m_main)
         st_folium(m_main, width=1200, height=400, key="main_map")
         
         cerebro = AgBrain(u['lat'], u['lon'])
@@ -96,17 +123,28 @@ else:
         humedad_suelo = random.randint(18, 42)
         
         if clima:
+            st.subheader("📊 Variables Críticas del Predio")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Temperatura", f"{clima['temp']} °C")
             c2.metric("Prob. Lluvia", f"{clima['rain_prob']} %")
             c3.metric("Humedad Suelo", f"{humedad_suelo} %")
-            c4.metric("ET0", f"{clima['et0']} mm")
+            c4.metric("Evapotranspiración", f"{clima['et0']} mm")
+
+            st.markdown("---")
+            st.subheader("📲 Acciones de Comunicación")
+            if st.button("📤 Enviar Informe Completo a WhatsApp", type="primary"):
+                with st.spinner("Generando y enviando reporte..."):
+                    exito, detalle = enviar_whatsapp_profesional(u, clima, humedad_suelo)
+                    if exito:
+                        st.success(f"✅ Informe enviado correctamente. SID: {detalle}")
+                    else:
+                        st.error(f"❌ Error al enviar: {detalle}. Verifica tus Secrets en Streamlit.")
 
     # --- CATEGORÍA 2: DESPLIEGUE DRON ---
     elif opcion == "🛸 Despliegue Dron":
         st.title("🚁 Torre de Control: Operación de Drones")
         st.sidebar.markdown("---")
-        st.sidebar.info(f"Cultivo actual: {u['cultivo']}")
+        st.sidebar.info(f"Objetivo: {u['cultivo']}")
         
         area_m2 = st.sidebar.number_input("Área a trabajar (m²)", value=int(u['hectareas']*10000))
         patron_vuelo = st.sidebar.selectbox("Patrón de Movimiento", ["Zig-Zag (Cobertura Total)", "Espiral (Foco Central)", "Perimetral (Bordes)"])
@@ -123,21 +161,19 @@ else:
             
             if iniciar_vuelo:
                 if tipo_mision == "Riego (Agua)" and 10 <= hora_simulada <= 18:
-                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO DE SEGURIDAD:</b> Evaporación alta a las {hora_simulada}:00.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO:</b> Riesgo de daño foliar detectado a las {hora_simulada}:00.</div>', unsafe_allow_html=True)
                     if not st.checkbox("Confirmar bajo responsabilidad"): st.stop()
-                st.success(f"✅ Dron en ruta sobre cultivo de {u['cultivo']}.")
+                st.success(f"✅ Dron en vuelo sobre {u['cultivo']}.")
 
         with col_mapa:
             mapa = folium.Map(location=[u['lat'], u['lon']], zoom_start=18, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri")
             folium.Marker([u['lat'], u['lon']], icon=folium.Icon(color="black", icon="home")).add_to(mapa)
             
             if iniciar_vuelo:
-                # Línea azul animada (AntPath) representando el movimiento real
                 plugins.AntPath(locations=ruta_previa, delay=800, color="cyan" if "Riego" in tipo_mision else "orange", weight=4).add_to(mapa)
             else:
-                # Línea amarilla de pre-visualización para mostrar por dónde se va a mover
                 folium.PolyLine(locations=ruta_previa, color="yellow", weight=2, dash_array='5, 10').add_to(mapa)
-                st.info("💡 La línea amarilla muestra la trayectoria planificada.")
+                st.info("💡 Pre-visualización: La línea amarilla muestra la ruta planificada.")
             
             st_folium(mapa, width=800, height=500, key="drone_control")
 

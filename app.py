@@ -10,16 +10,10 @@ from geopy.geocoders import Nominatim
 from twilio.rest import Client
 
 # --- CONFIGURACIÓN INICIAL ---
-geolocator = Nominatim(user_agent="agtech_brain_axel_v7")
+geolocator = Nominatim(user_agent="agtech_brain_axel_final")
 st.set_page_config(page_title="AgTech Brain | Gestión Agrícola", page_icon="🌿", layout="wide")
 
-st.markdown("""
-   <style>
-   .alerta-agronomica { color: #856404; background-color: #fff3cd; padding: 15px; border-radius: 5px; border-left: 5px solid #ffeeba; margin-bottom: 20px;}
-   </style>
-""", unsafe_allow_html=True)
-
-# --- MOTOR LÓGICO DE RUTAS ---
+# --- LÓGICA DE RUTAS Y CLIMA (Se mantienen igual) ---
 def calcular_ruta_dron(lat_centro, lon_centro, area_m2, patron):
     lado_grados = math.sqrt(area_m2) * 0.000009
     mitad = lado_grados / 2
@@ -37,7 +31,6 @@ def calcular_ruta_dron(lat_centro, lon_centro, area_m2, patron):
     ruta.append([lat_centro, lon_centro]) 
     return ruta
 
-# --- LÓGICA DE CLIMA E IA ---
 class AgBrain:
     def __init__(self, lat, lon):
         self.lat, self.lon = lat, lon
@@ -48,11 +41,13 @@ class AgBrain:
             return {'temp': res['hourly']['temperature_2m'][0], 'rain_prob': res['hourly']['precipitation_probability'][0], 'et0': res['hourly']['et0_fao_evapotranspiration'][0]}
         except: return None
 
-# --- FUNCIÓN DE ENVÍO WHATSAPP ---
+# --- FUNCIÓN DE ENVÍO WHATSAPP (Usa st.secrets de Streamlit Cloud) ---
 def enviar_whatsapp_profesional(u, clima, humedad):
     try:
-        # Intenta leer las llaves que fallan en image_d902a3.png
-        client = Client(st.secrets["TWILIO_ACCOUNT_SID"], st.secrets["TWILIO_AUTH_TOKEN"])
+        # Esto busca los datos en el panel de Secrets que configuraste en el paso anterior
+        account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
+        auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
+        client = Client(account_sid, auth_token)
         
         cuerpo_mensaje = f"""
 🌱 *AGTECH BRAIN - INFORME*
@@ -79,43 +74,33 @@ def enviar_whatsapp_profesional(u, clima, humedad):
 if 'registrado' not in st.session_state:
     st.session_state.registrado = False
 
-# --- PÁGINA 1: REGISTRO ---
 if not st.session_state.registrado:
     st.title("🚜 Bienvenido a AgTech Brain")
     with st.form("registro_maestro"):
-        col_reg1, col_reg2 = st.columns(2)
-        with col_reg1:
+        col1, col2 = st.columns(2)
+        with col1:
             nombre = st.text_input("Nombre del Administrador")
             calle = st.text_input("Dirección del Predio (Calle, Número, Ciudad)")
-        with col_reg2:
+        with col2:
             tipo_cultivo = st.selectbox("Tipo de Cultivo", ["Uva de Mesa", "Maíz", "Nogales", "Cerezas", "Trigo", "Otro"])
             hectareas = st.number_input("Hectáreas", min_value=0.1, value=1.0)
-        
-        if st.form_submit_button("Configurar Sistema Profesional"):
+        if st.form_submit_button("Configurar Sistema"):
             location = geolocator.geocode(f"{calle}, Chile")
             if location:
-                st.session_state.user_data = {
-                    "nombre": nombre, "hectareas": hectareas, "cultivo": tipo_cultivo,
-                    "lat": location.latitude, "lon": location.longitude, "addr": location.address
-                }
+                st.session_state.user_data = {"nombre": nombre, "hectareas": hectareas, "cultivo": tipo_cultivo, "lat": location.latitude, "lon": location.longitude, "addr": location.address}
                 st.session_state.registrado = True
                 st.rerun()
             else: st.error("Dirección no encontrada.")
-
-# --- APP PRINCIPAL ---
 else:
     u = st.session_state.user_data
     st.sidebar.title("AgTech Menu")
     opcion = st.sidebar.radio("Navegación:", ["📊 Dashboard General", "🛸 Despliegue Dron"])
     
-    # --- CATEGORÍA 1: DASHBOARD GENERAL ---
     if opcion == "📊 Dashboard General":
         st.title(f"🌱 Dashboard: {u['nombre']}")
-        st.write(f"📋 **Monitoreo Activo:** {u['cultivo']} en {u['addr']}")
-        
         m_main = folium.Map(location=[u['lat'], u['lon']], zoom_start=17)
         folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='Satellite').add_to(m_main)
-        folium.Marker([u['lat'], u['lon']], popup=f"Predio: {u['cultivo']}").add_to(m_main)
+        folium.Marker([u['lat'], u['lon']], popup=f"Terreno de {u['cultivo']}").add_to(m_main)
         st_folium(m_main, width=1200, height=400, key="main_map")
         
         cerebro = AgBrain(u['lat'], u['lon'])
@@ -123,59 +108,36 @@ else:
         humedad_suelo = random.randint(18, 42)
         
         if clima:
-            st.subheader("📊 Variables Críticas del Predio")
+            st.subheader("📊 Variables Críticas")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Temperatura", f"{clima['temp']} °C")
             c2.metric("Prob. Lluvia", f"{clima['rain_prob']} %")
             c3.metric("Humedad Suelo", f"{humedad_suelo} %")
-            c4.metric("Evapotranspiración", f"{clima['et0']} mm")
+            c4.metric("ET0", f"{clima['et0']} mm")
 
             st.markdown("---")
             st.subheader("📲 Acciones de Comunicación")
             if st.button("📤 Enviar Informe Completo a WhatsApp", type="primary"):
-                with st.spinner("Generando y enviando reporte..."):
+                with st.spinner("Enviando..."):
                     exito, detalle = enviar_whatsapp_profesional(u, clima, humedad_suelo)
-                    if exito:
-                        st.success(f"✅ Informe enviado correctamente.")
-                    else:
-                        st.error(f"❌ Error al enviar: {detalle}")
+                    if exito: st.success("✅ Informe enviado correctamente.")
+                    else: st.error(f"❌ Error al enviar: {detalle}")
 
-    # --- CATEGORÍA 2: DESPLIEGUE DRON ---
     elif opcion == "🛸 Despliegue Dron":
         st.title("🚁 Torre de Control: Operación de Drones")
-        st.sidebar.markdown("---")
-        st.sidebar.info(f"Objetivo: {u['cultivo']}")
-        
-        area_m2 = st.sidebar.number_input("Área a trabajar (m²)", value=int(u['hectareas']*10000))
+        area_m2 = st.sidebar.number_input("Área (m²)", value=int(u['hectareas']*10000))
         patron_vuelo = st.sidebar.selectbox("Patrón de Movimiento", ["Zig-Zag (Cobertura Total)", "Espiral (Foco Central)", "Perimetral (Bordes)"])
-        hora_simulada = st.sidebar.slider("Hora de operación:", 0, 23, 14)
-
-        col_control, col_mapa = st.columns([1.2, 2])
+        ruta_previa = calcular_ruta_dron(u['lat'], u['lon'], area_m2, patron_vuelo)
         
-        with col_control:
-            st.subheader("Controles de Misión")
-            tipo_mision = st.radio("Tipo de Aplicación:", ["Riego (Agua)", "Nutrición", "Tratamiento"])
-            ruta_previa = calcular_ruta_dron(u['lat'], u['lon'], area_m2, patron_vuelo)
-            
-            iniciar_vuelo = st.button("🚀 Forzar Despliegue Manual", type="primary", use_container_width=True)
-            
-            if iniciar_vuelo:
-                if tipo_mision == "Riego (Agua)" and 10 <= hora_simulada <= 18:
-                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO:</b> Riesgo de daño foliar detectado.</div>', unsafe_allow_html=True)
-                    if not st.checkbox("Confirmar bajo responsabilidad"): st.stop()
-                st.success(f"✅ Dron en vuelo sobre {u['cultivo']}.")
-
-        with col_mapa:
+        col_c, col_m = st.columns([1.2, 2])
+        with col_c:
+            iniciar = st.button("🚀 Forzar Despliegue Manual", type="primary", use_container_width=True)
+            if iniciar: st.success(f"✅ Misión iniciada sobre {u['cultivo']}.")
+        with col_m:
             mapa = folium.Map(location=[u['lat'], u['lon']], zoom_start=18, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri")
-            folium.Marker([u['lat'], u['lon']], icon=folium.Icon(color="black", icon="home")).add_to(mapa)
-            
-            if iniciar_vuelo:
-                plugins.AntPath(locations=ruta_previa, delay=800, color="cyan" if "Riego" in tipo_mision else "orange", weight=4).add_to(mapa)
-            else:
-                folium.PolyLine(locations=ruta_previa, color="yellow", weight=2, dash_array='5, 10').add_to(mapa)
-                st.info("💡 La línea amarilla muestra la ruta planificada.")
-            
-            st_folium(mapa, width=800, height=500, key="drone_control")
+            if iniciar: plugins.AntPath(locations=ruta_previa, delay=800, color="cyan", weight=4).add_to(mapa)
+            else: folium.PolyLine(locations=ruta_previa, color="yellow", weight=2, dash_array='5, 10').add_to(mapa)
+            st_folium(mapa, width=800, height=500, key="drone_map")
 
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.registrado = False

@@ -51,7 +51,7 @@ class AgBrain:
 # --- FUNCIÓN DE ENVÍO WHATSAPP ---
 def enviar_whatsapp_profesional(u, clima, humedad):
     try:
-        # Usa los secrets configurados en Streamlit Cloud
+        # Intenta leer las llaves que fallan en image_d902a3.png
         client = Client(st.secrets["TWILIO_ACCOUNT_SID"], st.secrets["TWILIO_AUTH_TOKEN"])
         
         cuerpo_mensaje = f"""
@@ -67,7 +67,7 @@ def enviar_whatsapp_profesional(u, clima, humedad):
 ✅ Estado del predio verificado.
 """
         message = client.messages.create(
-            from_='whatsapp:+14155238886', # Sandbox Twilio
+            from_='whatsapp:+14155238886', 
             body=cuerpo_mensaje,
             to=f'whatsapp:{st.secrets["MY_PHONE_NUMBER"]}'
         )
@@ -108,7 +108,7 @@ else:
     st.sidebar.title("AgTech Menu")
     opcion = st.sidebar.radio("Navegación:", ["📊 Dashboard General", "🛸 Despliegue Dron"])
     
-    # --- CATEGORÍA 1: DASHBOARD GENERAL (RESTAURADO CON WHATSAPP) ---
+    # --- CATEGORÍA 1: DASHBOARD GENERAL ---
     if opcion == "📊 Dashboard General":
         st.title(f"🌱 Dashboard: {u['nombre']}")
         st.write(f"📋 **Monitoreo Activo:** {u['cultivo']} en {u['addr']}")
@@ -136,9 +136,9 @@ else:
                 with st.spinner("Generando y enviando reporte..."):
                     exito, detalle = enviar_whatsapp_profesional(u, clima, humedad_suelo)
                     if exito:
-                        st.success(f"✅ Informe enviado correctamente. SID: {detalle}")
+                        st.success(f"✅ Informe enviado correctamente.")
                     else:
-                        st.error(f"❌ Error al enviar: {detalle}. Verifica tus Secrets en Streamlit.")
+                        st.error(f"❌ Error al enviar: {detalle}")
 
     # --- CATEGORÍA 2: DESPLIEGUE DRON ---
     elif opcion == "🛸 Despliegue Dron":
@@ -161,7 +161,7 @@ else:
             
             if iniciar_vuelo:
                 if tipo_mision == "Riego (Agua)" and 10 <= hora_simulada <= 18:
-                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO:</b> Riesgo de daño foliar detectado a las {hora_simulada}:00.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="alerta-agronomica"><b>⚠️ AVISO:</b> Riesgo de daño foliar detectado.</div>', unsafe_allow_html=True)
                     if not st.checkbox("Confirmar bajo responsabilidad"): st.stop()
                 st.success(f"✅ Dron en vuelo sobre {u['cultivo']}.")
 
@@ -173,7 +173,7 @@ else:
                 plugins.AntPath(locations=ruta_previa, delay=800, color="cyan" if "Riego" in tipo_mision else "orange", weight=4).add_to(mapa)
             else:
                 folium.PolyLine(locations=ruta_previa, color="yellow", weight=2, dash_array='5, 10').add_to(mapa)
-                st.info("💡 Pre-visualización: La línea amarilla muestra la ruta planificada.")
+                st.info("💡 La línea amarilla muestra la ruta planificada.")
             
             st_folium(mapa, width=800, height=500, key="drone_control")
 
